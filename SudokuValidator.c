@@ -1,12 +1,13 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h> // Para la función open
-#include <sys/mman.h> // Para la función mmap
-#include <pthread.h>
-#include <unistd.h>
-#include <sys/syscall.h>
-#include <sys/stat.h> // Para la estructura stat
-#include <sys/wait.h>
+#include <stdio.h>      // Biblioteca estándar de entrada/salida en C. Proporciona facilidades para la entrada y salida de datos, como funciones para leer y escribir en archivos, imprimir en la consola y leer la entrada del usuario.
+#include <omp.h>        // Proporciona las funcionalidades de OpenMP, una API para la programación paralela en sistemas de memoria compartida. Permite paralelizar bloques de código fácilmente con directivas de preprocesador.
+#include <stdlib.h>     // Biblioteca estándar de utilidades generales en C. Incluye funciones para la gestión de memoria dinámica, control de procesos, conversiones y otras utilidades como generación de números aleatorios.
+#include <fcntl.h>      // Define las constantes necesarias para las llamadas al sistema open. Facilita la apertura de archivos utilizando diversos flags, como O_RDONLY, O_WRONLY, etc.
+#include <sys/mman.h>   // Proporciona funcionalidades de mapeo de memoria, como mmap y munmap, que permiten mapear archivos o dispositivos en memoria, proporcionando un acceso eficiente a estos recursos.
+#include <pthread.h>    // Ofrece las funcionalidades de la biblioteca de hilos POSIX. Es utilizada para crear y manejar hilos, mutexes y otras herramientas de sincronización en programación multihilo.
+#include <unistd.h>     // Proporciona acceso a la API de POSIX para llamadas al sistema como read, write, close, y muchas otras que interactúan directamente con el sistema operativo Unix/Linux.
+#include <sys/syscall.h> // Permite realizar llamadas al sistema directamente a través de sus identificadores numéricos. Se utiliza para funciones del sistema operativo que no están expuestas por las bibliotecas estándar.
+#include <sys/stat.h>   // Define la estructura 'stat' que se usa en la llamada al sistema stat, la cual recopila información sobre el archivo identificado por la ruta dada, como tamaño, permisos, etc.
+#include <sys/wait.h>   // Incluye las declaraciones para las llamadas al sistema de espera, como wait y waitpid, que permiten a un proceso esperar a que sus procesos hijos cambien de estado o terminen.
 
 // Longitud de filas y columnas
 #define SIZE 9
@@ -27,6 +28,7 @@ void *check_columns(void *param);
 int check_subgrid(void *param);
 
 int main(int argc, char *argv[]) {
+    omp_set_num_threads(1);
     if (argc != 2) {
         printf("Uso: %s <input_file>\n", argv[0]);
         exit(EXIT_FAILURE);
@@ -150,6 +152,7 @@ int check_rows(void *param) {
     parameters *p = (parameters *)param;
     int start_row = p->start_row;
 
+    #pragma omp parallel for schedule(dynamic)
     for (int row = start_row; row < SIZE; ++row) {
         int used[SIZE + 1] = {0};
         for (int col = 0; col < SIZE; ++col) {
@@ -170,6 +173,7 @@ int check_column(void* param){
     parameters *p = (parameters *)param;
     int start_col = p->start_col;
 
+    #pragma omp parallel for schedule(dynamic)
     for (int col = start_col; col < SIZE; ++col) {
         printf("En la revision de columnas el siguiente es un thread en ejecucion: %lu\n", syscall(SYS_gettid));
         int used[SIZE + 1] = {0};
@@ -177,7 +181,7 @@ int check_column(void* param){
             int digit = sudoku[row][col];
             if (used[digit] || digit < 1 || digit > SIZE) {
                 printf("Sudoku invalido (columna %d)\n", col + 1);
-                return -1;
+                pthread_exit(NULL);
             }
             used[digit] = 1;
         }
@@ -195,7 +199,7 @@ void *check_columns(void *param) {
         printf("Columnas validas.\n");
         pthread_exit(0);
     } else {
-        pthread_exit(NULL);
+        exit(EXIT_FAILURE);
     }
 
     
@@ -208,17 +212,25 @@ int check_subgrid(void *param) {
     int start_col = p->start_col;
 
     int used[SIZE + 1] = {0};
+    omp_lock_t lock;
+    omp_init_lock(&lock); // Inicializar el bloqueo
 
+    #pragma omp parallel for schedule(dynamic)
     for (int row = start_row; row < start_row + 3; ++row) {
         for (int col = start_col; col < start_col + 3; ++col) {
             int digit = sudoku[row][col];
+
+            omp_set_lock(&lock); // Establecer el bloqueo
             if (used[digit] == 1 || digit < 1 || digit > SIZE) {
                 printf("Sudoku invalido (subarreglo en fila %d, columna %d)\n", row + 1, col + 1);
-                exit(EXIT_FAILURE);
+                exit(EXIT_FAILURE); // Nota: exit terminará el programa inmediatamente, lo cual puede no ser deseable
             }
             used[digit] = 1;
+            omp_unset_lock(&lock); // Liberar el bloqueo
         }
     }
+
+    omp_destroy_lock(&lock); // Destruir el bloqueo
     printf("Subarreglo valido.\n");
     return 0;
 }
