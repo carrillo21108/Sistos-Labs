@@ -148,112 +148,108 @@ int main(int argc, char *argv[]) {
     }
 }
 
-// Funcion para revisar filas
 int check_rows(void *param) {
-    omp_set_nested(true);
-    parameters *p = (parameters *)param;
-    int start_row = p->start_row;
+    omp_set_nested(true); // Permite la anidación de regiones paralelas.
+    parameters *p = (parameters *)param; // Cast del parámetro a la estructura esperada.
+    int start_row = p->start_row; // Fila desde la cual comenzar la verificación.
 
-    omp_set_num_threads(9);
-    #pragma omp parallel for schedule(dynamic)
-    for (int row = start_row; row < SIZE; ++row) {
-        int used[SIZE + 1] = {0};
-        omp_lock_t lock;
-        omp_init_lock(&lock); // Inicializar el bloqueo
+    omp_set_num_threads(9); // Configura 9 hilos para la región paralela, uno por cada fila restante.
+    #pragma omp parallel for schedule(dynamic) // Distribuye dinámicamente las iteraciones entre los hilos disponibles.
+    for (int row = start_row; row < SIZE; ++row) { // Itera sobre las filas del Sudoku.
+        int used[SIZE + 1] = {0}; // Arreglo para marcar los dígitos encontrados en la fila.
+        omp_lock_t lock; // Declara un mutex para controlar el acceso a la sección crítica.
+        omp_init_lock(&lock); // Inicializa el mutex.
 
-        omp_set_num_threads(9);
-        #pragma omp parallel for schedule(dynamic)
-        for (int col = 0; col < SIZE; ++col) {
-            int digit = sudoku[row][col];
-            omp_set_lock(&lock); // Establecer el bloqueo
-            if (used[digit] || digit < 1 || digit > SIZE) {
+        omp_set_num_threads(9); // Nueva configuración de hilos para la región anidada.
+        #pragma omp parallel for schedule(dynamic) // Región paralela anidada para iterar sobre las columnas.
+        for (int col = 0; col < SIZE; ++col) { // Itera sobre las columnas de la fila actual.
+            int digit = sudoku[row][col]; // Obtiene el dígito en la posición actual.
+            omp_set_lock(&lock); // Adquiere el mutex antes de modificar el arreglo 'used'.
+            if (used[digit] || digit < 1 || digit > SIZE) { // Verifica la validez del dígito.
                 printf("Sudoku invalido (fila %d)\n", row + 1);
-                exit(EXIT_FAILURE);
+                exit(EXIT_FAILURE); // Termina el programa si se encuentra una inconsistencia.
             }
-            used[digit] = 1;
-            omp_unset_lock(&lock); // Liberar el bloqueo
+            used[digit] = 1; // Marca el dígito como encontrado.
+            omp_unset_lock(&lock); // Libera el mutex.
         }
-        omp_destroy_lock(&lock); // Destruir el bloqueo
+        omp_destroy_lock(&lock); // Destruye el mutex después de su uso.
     }
-    printf("Filas validas.\n");
+    printf("Filas validas.\n"); // Mensaje de éxito si todas las filas son válidas.
     return 0;
 }
 
-//Funcion para revisar columnas
 int check_column(void* param){
-    omp_set_nested(true);
-    parameters *p = (parameters *)param;
-    int start_col = p->start_col;
+    omp_set_nested(true); // Permite la anidación de regiones paralelas.
+    parameters *p = (parameters *)param; // Cast del parámetro a la estructura esperada.
+    int start_col = p->start_col; // Columna desde la cual comenzar la verificación.
 
-    omp_set_num_threads(9);
-    #pragma omp parallel for//schedule(dynamic)
-    for (int col = start_col; col < SIZE; ++col) {
+    omp_set_num_threads(9); // Configura 9 hilos para la región paralela, uno por cada columna.
+    #pragma omp parallel for // Region paralela para iterar sobre las columnas del Sudoku.
+    for (int col = start_col; col < SIZE; ++col) { // Itera sobre las columnas.
         printf("En la revision de columnas el siguiente es un thread en ejecucion: %lu\n", syscall(SYS_gettid));
-        int used[SIZE + 1] = {0};
-        omp_lock_t lock;
-        omp_init_lock(&lock); // Inicializar el bloqueo
+        int used[SIZE + 1] = {0}; // Arreglo para marcar los dígitos encontrados en la columna.
+        omp_lock_t lock; // Declara un mutex.
+        omp_init_lock(&lock); // Inicializa el mutex.
 
-        omp_set_num_threads(9);
-        #pragma omp parallel for schedule(dynamic)
-        for (int row = 0; row < SIZE; ++row) {
-            int digit = sudoku[row][col];
-            omp_set_lock(&lock); // Establecer el bloqueo
-            if (used[digit] || digit < 1 || digit > SIZE) {
+        omp_set_num_threads(9); // Configura nuevamente 9 hilos para la región paralela anidada.
+        #pragma omp parallel for schedule(dynamic) // Región paralela anidada para iterar sobre las filas de la columna actual.
+        for (int row = 0; row < SIZE; ++row) { // Itera sobre las filas de la columna actual.
+            int digit = sudoku[row][col]; // Obtiene el dígito en la posición actual.
+            omp_set_lock(&lock); // Adquiere el mutex antes de modificar el arreglo 'used'.
+            if (used[digit] || digit < 1 || digit > SIZE) { // Verifica la validez del dígito.
                 printf("Sudoku invalido (columna %d)\n", col + 1);
-                pthread_exit(NULL);
+                pthread_exit(NULL); // Termina el hilo si se encuentra una inconsistencia.
             }
-            used[digit] = 1;
-            omp_unset_lock(&lock); // Liberar el bloqueo
+            used[digit] = 1; // Marca el dígito como encontrado.
+            omp_unset_lock(&lock); // Libera el mutex.
         }
-        omp_destroy_lock(&lock); // Destruir el bloqueo
+        omp_destroy_lock(&lock); // Destruye el mutex después de su uso.
     }
 
     return 0;
 }
 
-// Funcion asignable a thread
 void *check_columns(void *param) {
     printf("El thread que ejecuta el metodo para ejecutar el metodo de revision de columnas es: %lu\n", syscall(SYS_gettid));
-    int res = check_column(param);
+    int res = check_column(param); // Llama a 'check_column' y guarda el resultado.
     
-    if (res == 0){
+    if (res == 0){ // Si el resultado es exitoso (columnas válidas).
         printf("Columnas validas.\n");
-        pthread_exit(0);
+        pthread_exit(0); // Termina el hilo correctamente.
     } else {
-        exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE); // Termina el programa si hay un error.
     }
 }
 
-//Funcion para revisar subarreglos de 3x3
 int check_subgrid(void *param) {
-    omp_set_nested(true);
-    parameters *p = (parameters *)param;
-    int start_row = p->start_row;
-    int start_col = p->start_col;
+    omp_set_nested(true); // Permite la anidación de regiones paralelas.
+    parameters *p = (parameters *)param; // Cast del parámetro a la estructura esperada.
+    int start_row = p->start_row; // Fila inicial del subarreglo 3x3 a verificar.
+    int start_col = p->start_col; // Columna inicial del subarreglo 3x3 a verificar.
 
-    int used[SIZE + 1] = {0};
-    omp_lock_t lock;
-    omp_init_lock(&lock); // Inicializar el bloqueo
+    int used[SIZE + 1] = {0}; // Arreglo para marcar los dígitos encontrados en el subarreglo.
+    omp_lock_t lock; // Declara un mutex.
+    omp_init_lock(&lock); // Inicializa el mutex.
 
-    omp_set_num_threads(3);
-    #pragma omp parallel for schedule(dynamic)
-    for (int row = start_row; row < start_row + 3; ++row) {
-        omp_set_num_threads(3);
-        #pragma omp parallel for schedule(dynamic)
-        for (int col = start_col; col < start_col + 3; ++col) {
-            int digit = sudoku[row][col];
+    omp_set_num_threads(3); // Configura 3 hilos para la región paralela, uno por cada fila del subarreglo.
+    #pragma omp parallel for schedule(dynamic) // Region paralela para iterar sobre las filas del subarreglo.
+    for (int row = start_row; row < start_row + 3; ++row) { // Itera sobre las filas del subarreglo.
+        omp_set_num_threads(3); // Configura nuevamente 3 hilos para la región paralela anidada.
+        #pragma omp parallel for schedule(dynamic) // Región paralela anidada para iterar sobre las columnas del subarreglo.
+        for (int col = start_col; col < start_col + 3; ++col) { // Itera sobre las columnas del subarreglo.
+            int digit = sudoku[row][col]; // Obtiene el dígito en la posición actual.
 
-            omp_set_lock(&lock); // Establecer el bloqueo
-            if (used[digit] == 1 || digit < 1 || digit > SIZE) {
+            omp_set_lock(&lock); // Adquiere el mutex antes de modificar el arreglo 'used'.
+            if (used[digit] == 1 || digit < 1 || digit > SIZE) { // Verifica la validez del dígito.
                 printf("Sudoku invalido (subarreglo en fila %d, columna %d)\n", row + 1, col + 1);
-                exit(EXIT_FAILURE); // Nota: exit terminará el programa inmediatamente, lo cual puede no ser deseable
+                exit(EXIT_FAILURE); // Termina el programa si se encuentra una inconsistencia.
             }
-            used[digit] = 1;
-            omp_unset_lock(&lock); // Liberar el bloqueo
+            used[digit] = 1; // Marca el dígito como encontrado.
+            omp_unset_lock(&lock); // Libera el mutex.
         }
     }
 
-    omp_destroy_lock(&lock); // Destruir el bloqueo
-    printf("Subarreglo valido.\n");
+    omp_destroy_lock(&lock); // Destruye el mutex después de su uso.
+    printf("Subarreglo valido.\n"); // Mensaje de éxito si el subarreglo es válido.
     return 0;
 }
