@@ -8,6 +8,7 @@
 #include <sys/syscall.h> // Permite realizar llamadas al sistema directamente a través de sus identificadores numéricos. Se utiliza para funciones del sistema operativo que no están expuestas por las bibliotecas estándar.
 #include <sys/stat.h>   // Define la estructura 'stat' que se usa en la llamada al sistema stat, la cual recopila información sobre el archivo identificado por la ruta dada, como tamaño, permisos, etc.
 #include <sys/wait.h>   // Incluye las declaraciones para las llamadas al sistema de espera, como wait y waitpid, que permiten a un proceso esperar a que sus procesos hijos cambien de estado o terminen.
+#include <stdbool.h>
 
 // Longitud de filas y columnas
 #define SIZE 9
@@ -149,20 +150,30 @@ int main(int argc, char *argv[]) {
 
 // Funcion para revisar filas
 int check_rows(void *param) {
+    omp_set_nested(true);
     parameters *p = (parameters *)param;
     int start_row = p->start_row;
 
+    omp_set_num_threads(9);
     #pragma omp parallel for schedule(dynamic)
     for (int row = start_row; row < SIZE; ++row) {
         int used[SIZE + 1] = {0};
+        omp_lock_t lock;
+        omp_init_lock(&lock); // Inicializar el bloqueo
+
+        omp_set_num_threads(9);
+        #pragma omp parallel for schedule(dynamic)
         for (int col = 0; col < SIZE; ++col) {
             int digit = sudoku[row][col];
+            omp_set_lock(&lock); // Establecer el bloqueo
             if (used[digit] || digit < 1 || digit > SIZE) {
                 printf("Sudoku invalido (fila %d)\n", row + 1);
                 exit(EXIT_FAILURE);
             }
             used[digit] = 1;
+            omp_unset_lock(&lock); // Liberar el bloqueo
         }
+        omp_destroy_lock(&lock); // Destruir el bloqueo
     }
     printf("Filas validas.\n");
     return 0;
@@ -170,21 +181,31 @@ int check_rows(void *param) {
 
 //Funcion para revisar columnas
 int check_column(void* param){
+    omp_set_nested(true);
     parameters *p = (parameters *)param;
     int start_col = p->start_col;
 
-    #pragma omp parallel for schedule(dynamic)
+    omp_set_num_threads(9);
+    #pragma omp parallel for//schedule(dynamic)
     for (int col = start_col; col < SIZE; ++col) {
         printf("En la revision de columnas el siguiente es un thread en ejecucion: %lu\n", syscall(SYS_gettid));
         int used[SIZE + 1] = {0};
+        omp_lock_t lock;
+        omp_init_lock(&lock); // Inicializar el bloqueo
+
+        omp_set_num_threads(9);
+        #pragma omp parallel for schedule(dynamic)
         for (int row = 0; row < SIZE; ++row) {
             int digit = sudoku[row][col];
+            omp_set_lock(&lock); // Establecer el bloqueo
             if (used[digit] || digit < 1 || digit > SIZE) {
                 printf("Sudoku invalido (columna %d)\n", col + 1);
                 pthread_exit(NULL);
             }
             used[digit] = 1;
+            omp_unset_lock(&lock); // Liberar el bloqueo
         }
+        omp_destroy_lock(&lock); // Destruir el bloqueo
     }
 
     return 0;
@@ -201,12 +222,11 @@ void *check_columns(void *param) {
     } else {
         exit(EXIT_FAILURE);
     }
-
-    
 }
 
 //Funcion para revisar subarreglos de 3x3
 int check_subgrid(void *param) {
+    omp_set_nested(true);
     parameters *p = (parameters *)param;
     int start_row = p->start_row;
     int start_col = p->start_col;
@@ -215,8 +235,11 @@ int check_subgrid(void *param) {
     omp_lock_t lock;
     omp_init_lock(&lock); // Inicializar el bloqueo
 
+    omp_set_num_threads(3);
     #pragma omp parallel for schedule(dynamic)
     for (int row = start_row; row < start_row + 3; ++row) {
+        omp_set_num_threads(3);
+        #pragma omp parallel for schedule(dynamic)
         for (int col = start_col; col < start_col + 3; ++col) {
             int digit = sudoku[row][col];
 
